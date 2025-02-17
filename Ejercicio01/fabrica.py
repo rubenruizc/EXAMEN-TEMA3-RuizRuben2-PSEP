@@ -1,39 +1,48 @@
 import time
 import random
-from threading import Thread,Lock
+from threading import Thread, Lock, Condition
 
-listaAtomos = ["H","O"]
 class Fabrica(Thread):
- 
+    listaAtomos = ["H", "O"]
+    lock = Lock()
+    condition = Condition(lock)
+    atomos_generados = []
+    moleculas_creadas = 0
 
-    def __init__ (self):
-        Thread.__init__(self)
-        self.atomo = random.choice(listaAtomos)
-
-    def run (self):
+    def run(self):
         while True:
-            print("La fábrica ha generado un átomo de ", self.atomo)
-            time.sleep(2)
-    
-        
-
-    
-
+            with Fabrica.lock:
+                atomo = random.choice(Fabrica.listaAtomos)
+                Fabrica.atomos_generados.append(atomo)
+                print(f"La fábrica ha generado un átomo de {atomo}")
+                Fabrica.condition.notify_all()
+            time.sleep(1)
 
 class Operario(Thread):
-    
-    lock = Lock()
-
-    def __init__(self,nombre):
+    def __init__(self, nombre):
         Thread.__init__(self)
         self.nombre = nombre
         self.listaAtomosConseguidos = []
 
     def run(self):
-        with Operario.lock:
-            print("El operario",self.nombre,"ha obtenido un átomo de:",Fabrica.atomo)
-            self.listaAtomosConseguidos.append(Fabrica.atomo)
-
-        
-
-
+        while True:
+            self.listaAtomosConseguidos = []  # Vaciar lista después de ensamblar una molécula
+            while len(self.listaAtomosConseguidos) < 3:
+                with Fabrica.lock:
+                    while len(Fabrica.atomos_generados) < 1:
+                        Fabrica.condition.wait()
+                    
+                    atomo = Fabrica.atomos_generados.pop(0)
+                    self.listaAtomosConseguidos.append(atomo)
+                    print(f"El operario {self.nombre} ha obtenido un átomo de {atomo}")
+                time.sleep(1)
+                
+            if self.listaAtomosConseguidos.count("H") >= 2 and self.listaAtomosConseguidos.count("O") >= 1:
+                self.listaAtomosConseguidos.remove("H")
+                self.listaAtomosConseguidos.remove("H")
+                self.listaAtomosConseguidos.remove("O")
+                with Fabrica.lock:
+                    Fabrica.moleculas_creadas += 1
+                    print(f"{self.nombre} ha ensamblado una molécula de H2O. Total: {Fabrica.moleculas_creadas}")
+                    Fabrica.condition.notify_all()
+                time.sleep(1)
